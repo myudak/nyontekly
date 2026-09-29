@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+settings.json
+Cookies
+Cookies-*
+Local State

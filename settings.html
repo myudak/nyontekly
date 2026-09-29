@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <title>Web Tool Settings</title>
+  <link rel="stylesheet" href="settings.css">
+  <script src="settings.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>Settings</h1>
+    <label for="opacity">Window opacity <strong id="opacityValue">85%</strong></label>
+    <input id="opacity" type="range" min="35" max="100" step="1">
+    <p class="hint">Lower it to see your desktop behind ChatGPT.</p>
+
+    <label class="checkbox"><input id="alwaysOnTop" type="checkbox"> Always on top</label>
+
+    <label for="toolUrl">Website URL</label>
+    <div class="urlRow">
+      <input id="toolUrl" type="url" placeholder="https://chatgpt.com/" spellcheck="false">
+      <button id="applyUrl" type="button">Open</button>
+    </div>
+    <p id="status" role="status"></p>
+  </main>
+</body>
+</html>
