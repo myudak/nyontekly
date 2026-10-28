@@ -7,6 +7,7 @@ const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 const {configProfile, parseUrl, rewriteHeaders, sha256} = require('./seb');
 const {runCleaner,verifyDirectory} = require('./cleaner-runner');
+const {PedalRunner,inspectPedal} = require('./pedal-runner');
 let win, requestedSource = null, requestedAudio = false, examWindow, examProfile = null, mockServer = null;
 const examSessionName = 'persist:nyontekly-exam';
 const local = e => e.sender === win?.webContents;
@@ -148,3 +149,10 @@ ipcMain.handle('cleaner-run', async(e,bytes,options)=>{
 });
 ipcMain.handle('cleaner-cancel',e=>{if(local(e))cleanerAbort?.abort();});
 app.on('before-quit',()=>cleanerAbort?.abort());
+
+let pedalDir=null;
+const pedalRunner=new PedalRunner({onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('pedal-status',status);}});
+ipcMain.handle('pedal-folder',async e=>{if(!local(e))throw new Error('Not allowed.');const result=await dialog.showOpenDialog(win,{title:'Choose the Video Pedal folder',properties:['openDirectory']});if(result.canceled)return null;await inspectPedal(result.filePaths[0]);pedalDir=result.filePaths[0];return pedalDir;});
+ipcMain.handle('pedal-start',async(e,options)=>{if(!local(e))throw new Error('Not allowed.');return pedalRunner.start(pedalDir,options);});
+ipcMain.handle('pedal-stop',e=>{if(!local(e))throw new Error('Not allowed.');return pedalRunner.stop();});
+app.on('before-quit',()=>pedalRunner.stop());
