@@ -25,13 +25,18 @@
       "style.css",
       "renderer.js",
       "seb.js",
-      "package.json"
+      "package.json",
+      "voice/worker.py",
+      "voice/requirements.txt"
     ],
     "directories": {
       "output": "dist"
     },
     "win": {
       "artifactName": "Nyontekly-${version}-portable.${ext}"
-    }
+    },
+    "asarUnpack": [
+      "voice/**"
+    ]
   }
 }

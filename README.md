@@ -37,3 +37,25 @@ Notes, recent screenshots, shortcut settings, and website sessions remain on the
 ## Development
 
 Run `npm run check` for syntax checks and `npm test` for Config Key and header-scoping tests. Desktop capture, OCR installation, embedded sign-in, protection, PDF rendering, and real exam-server behavior still require verification on the target machine.
+
+## Local voice mode
+
+Voice mode records short chunks from your microphone or from a selected screen's system audio and transcribes them locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper). It is separate from the ChatGPT website login: no API key is required. You must start and stop capture explicitly. The text is editable and retained in local browser storage until cleared.
+
+Install Python and faster-whisper **on the machine running Nyontekly**:
+
+```bash
+python -m pip install -r voice/requirements.txt
+```
+
+On Linux/macOS use `python3 -m pip ...`. For the portable Windows EXE, install Python on PATH and run `python -m pip install "faster-whisper>=1.1,<2"`. Model files download from Hugging Face on first use; subsequent transcription runs locally from the cache. Choose `tiny` or `base` for lighter CPU use; larger models need more memory and can be slow. `distil-large-v3` is English-only. Auto, Indonesian and English language options are available; accuracy and speed vary. This is chunked transcription rather than true word-by-word streaming. If transcription falls behind, stop and select a smaller model.
+
+To capture system audio, first select a screen in **Capture**, then choose **System audio** in **Voice**. Loopback capture and permissions depend on your OS and Electron; on macOS additional system-audio permission may be required and a track can be silent. If unavailable, use a microphone. Stop when finished, and obtain any consent required for recording other people.
+
+## Session workflow
+
+Use **Session** to combine lecture/coding/interview instructions with notes, a text/Markdown reference, the editable transcript, and screenshot OCR. **Build & copy prompt** prepares text for pasting into ChatGPT or another supported website; **Copy screenshot** copies the image separately. Summary is a prompt for your selected AI website, not an automatic model call. Paste useful answers into tagged, locally stored answer cards to search later. PDF files can be viewed in Practice, but are not parsed into session context automatically.
+
+The microphone, system-audio capture, local model download, OCR, PDF display, sign-in, and screenshot protection still require testing on your target desktop. To test worker protocol without downloading a model: `python -m unittest discover -s voice -p 'test_*.py'`.
+
+**Ask this** in Capture runs OCR on the selected screenshot and copies a session prompt containing the extracted text; paste the image separately if needed. In the Session tab, Ctrl/Cmd+Enter copies the current prompt. Session instructions, questions, and text references also persist locally.

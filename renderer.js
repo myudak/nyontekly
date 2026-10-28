@@ -57,3 +57,45 @@ $('save-shortcuts').onclick=async()=>{try{const data={toggle:$('shortcut-toggle'
 try{const saved=JSON.parse(localStorage.getItem('nyontekly.shortcuts')||'null');if(saved){$('shortcut-toggle').value=saved.toggle;$('shortcut-capture').value=saved.capture;window.nyontekly.shortcuts(saved).catch(e=>$('shortcut-status').textContent=e.message);}}catch{}
 
 window.nyontekly.onExamResult(r=>{$('exam-observed').textContent=r.error?'Page load error: '+r.error:'Observed HTTP '+r.status+' at '+r.url+'. A successful response does not prove full SEB compatibility.';});
+let voiceStream=null,voiceRecorder=null,voiceTimer=null,voiceRunning=false,voiceGeneration=0,voiceOutstanding=0;
+$('transcript').value=localStorage.getItem('nyontekly.transcript')||'';
+$('transcript').oninput=()=>localStorage.setItem('nyontekly.transcript',$('transcript').value);
+window.nyontekly.onVoiceStatus(message=>{$('voice-status').textContent=message;});
+function finishVoice(){voiceRunning=false;clearTimeout(voiceTimer);voiceStream?.getTracks().forEach(t=>t.stop());voiceStream=null;$('voice-start').disabled=false;$('voice-stop').disabled=true;$('voice-model').disabled=false;$('voice-language').disabled=false;$('voice-source').disabled=false;}
+function stopMicrophone(){voiceRunning=false;clearTimeout(voiceTimer);if(voiceRecorder?.state==='recording')voiceRecorder.stop();else finishVoice();$('voice-status').textContent='Audio capture stopped. Finishing pending transcription…';}
+function recordVoiceChunk(generation){
+ if(!voiceRunning||!voiceStream)return;
+ const options={model:$('voice-model').value,language:$('voice-language').value};const recorder=new MediaRecorder(new MediaStream(voiceStream.getAudioTracks()),{mimeType:'audio/webm;codecs=opus'});voiceRecorder=recorder;const data=[];
+ recorder.ondataavailable=e=>{if(e.data.size)data.push(e.data);};
+ recorder.onerror=()=>{stopMicrophone();$('voice-status').textContent='Microphone recording failed.';};
+ recorder.onstop=async()=>{if(generation!==voiceGeneration)return;if(voiceRunning)recordVoiceChunk(generation);else finishVoice();const blob=new Blob(data,{type:'audio/webm'});if(!blob.size)return;
+ if(voiceOutstanding>=3){stopMicrophone();$('voice-status').textContent='Transcription is falling behind. Choose a smaller model and restart.';return;}
+ voiceOutstanding++;$('voice-status').textContent=voiceRunning?'Listening · transcribing locally…':'Audio capture stopped · transcribing final chunk…';
+ try{const result=await window.nyontekly.transcribe(await blob.arrayBuffer(),options);if(generation!==voiceGeneration)return;if(result.text){const time=new Date().toLocaleTimeString();$('transcript').value+=`[${time}] ${result.text}\n`;$('transcript').dispatchEvent(new Event('input'));}$('voice-status').textContent=voiceRunning?'Listening · audio capture on':'Audio capture stopped.';}
+ catch(e){if(generation!==voiceGeneration)return;stopMicrophone();$('voice-status').textContent='Transcription failed: '+e.message;}finally{voiceOutstanding--;}
+ };
+ recorder.start();voiceTimer=setTimeout(()=>{if(recorder.state==='recording')recorder.stop();},8000);
+}
+$('voice-start').onclick=async()=>{try{if($('voice-model').value==='distil-large-v3' && $('voice-language').value==='id')throw new Error('Distil large v3 is English-only. Choose a multilingual model.');if($('voice-source').value==='system'){if(!selected)throw new Error('Choose a screen in the Capture tab first.');await window.nyontekly.selectSource(selected,true);const display=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});const audioTracks=display.getAudioTracks();if(!audioTracks.length || audioTracks[0].readyState!=='live'){display.getTracks().forEach(t=>t.stop());throw new Error('System audio unavailable. Check OS permissions and try microphone input.');}voiceStream=display;}else voiceStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});voiceRunning=true;voiceGeneration++;$('voice-start').disabled=true;$('voice-stop').disabled=false;$('voice-model').disabled=true;$('voice-language').disabled=true;$('voice-source').disabled=true;$('voice-status').textContent='Listening · audio capture on';recordVoiceChunk(voiceGeneration);}catch(e){finishVoice();$('voice-status').textContent='Could not start microphone: '+e.message;}};
+$('voice-stop').onclick=stopMicrophone;
+$('voice-copy').onclick=()=>window.nyontekly.copyText($('transcript').value);
+$('voice-clear').onclick=()=>{$('transcript').value='';$('transcript').dispatchEvent(new Event('input'));};
+window.addEventListener('beforeunload',()=>{voiceStream?.getTracks().forEach(t=>t.stop());});
+const modeInstructions={lecture:'Explain clearly in Indonesian. Include key concepts and a short example.',coding:'Help debug the issue. Explain the root cause and show a minimal fix.',interview:'Act as an interview practice coach. Give a concise answer and explain its reasoning.',custom:''};
+$('session-mode').onchange=e=>{$('session-instructions').value=modeInstructions[e.target.value];};
+$('session-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(f.size>1000000){$('session-status').textContent='Text file must be under 1 MB.';return;}$('session-context').value=await f.text();};
+function buildSessionPrompt(summary=false){const parts=[];const add=(label,value)=>{if(value.trim())parts.push(`${label}:\n${value.trim()}`)};add('Instructions',summary?'Summarize this session. List key ideas, unanswered questions, and next steps in Indonesian.':$('session-instructions').value);add('Question',summary?'':$('session-question').value);add('Notes',$('notes-text').value);add('Reference material',$('session-context').value);if($('include-transcript').checked)add('Transcript',$('transcript').value);if($('include-ocr').checked)add('Screenshot OCR',$('ocr-output').value);return parts.join('\n\n');}
+async function copySession(summary){const prompt=buildSessionPrompt(summary);$('assembled-prompt').value=prompt;await window.nyontekly.copyText(prompt);$('session-status').textContent='Prompt copied. Open Assistant and paste it; paste an image separately.';}
+$('build-prompt').onclick=()=>copySession(false);$('copy-summary').onclick=()=>copySession(true);$('copy-latest-shot').onclick=async()=>{if(!screenshotBytes){$('session-status').textContent='Take or select a screenshot first.';return;}await window.nyontekly.copyImage(screenshotBytes);$('session-status').textContent='Screenshot copied. Paste it into the AI site.';};
+let cards=[];try{cards=JSON.parse(localStorage.getItem('nyontekly.cards')||'[]');if(!Array.isArray(cards))cards=[];}catch{}
+function showCards(){const container=$('cards'),q=$('card-search').value.toLowerCase();container.replaceChildren();cards.forEach((card,i)=>{if(!(card.tag+' '+card.text).toLowerCase().includes(q))return;const el=document.createElement('div');el.className='answer-card';const title=document.createElement('b');title.textContent=card.tag||'Uncategorized';const body=document.createElement('p');body.textContent=card.text;const del=document.createElement('button');del.textContent='Delete';del.className='textbutton';del.onclick=()=>{cards.splice(i,1);localStorage.setItem('nyontekly.cards',JSON.stringify(cards));showCards();};el.append(title,body,del);container.append(el);});}
+$('save-card').onclick=()=>{const text=$('card-answer').value.trim();if(!text)return;cards.unshift({tag:$('card-tag').value.trim(),text});try{localStorage.setItem('nyontekly.cards',JSON.stringify(cards));$('card-answer').value='';showCards();}catch{$('session-status').textContent='Local storage is full.';}};$('card-search').oninput=showCards;showCards();
+
+const sessionFields=['session-mode','session-instructions','session-question','session-context'];
+try{const saved=JSON.parse(localStorage.getItem('nyontekly.session')||'{}');for(const id of sessionFields)if(typeof saved[id]==='string')$(id).value=saved[id];}catch{}
+function persistSession(){const state={};for(const id of sessionFields)state[id]=$(id).value;try{localStorage.setItem('nyontekly.session',JSON.stringify(state));}catch{$('session-status').textContent='Local storage is full.';}}
+for(const id of sessionFields)$(id).addEventListener('input',persistSession);
+$('session-mode').addEventListener('change',persistSession);
+$('session-file').addEventListener('change',async e=>{if(e.target.files[0]?.size<=1000000)setTimeout(persistSession,0);});
+$('ask-shot').onclick=async()=>{if(!screenshotBytes)return;$('capture-status').textContent='Extracting text from screenshot…';try{$('ocr-output').value=await window.nyontekly.ocr(screenshotBytes);panel('session');await copySession(false);}catch(e){$('capture-status').textContent='OCR failed: '+e.message;}};
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&$('session').classList.contains('active')){e.preventDefault();copySession(false);}});

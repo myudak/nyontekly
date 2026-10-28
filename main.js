@@ -4,13 +4,14 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
+const readline = require('node:readline');
 const {configProfile, parseUrl, rewriteHeaders, sha256} = require('./seb');
-let win, requestedSource = null, examWindow, examProfile = null, mockServer = null;
+let win, requestedSource = null, requestedAudio = false, examWindow, examProfile = null, mockServer = null;
 const examSessionName = 'persist:nyontekly-exam';
 const local = e => e.sender === win?.webContents;
 function createWindow() {
   win = new BrowserWindow({ width: 470, height: 730, minWidth: 380, minHeight: 480, frame: false, alwaysOnTop: true, backgroundColor: '#101116', title: 'Nyontekly', webPreferences: { preload: path.join(__dirname,'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webviewTag: true } });
-  win.setContentProtection(true);
+  win.setContentProtection(process.env.NYONTEKLY_SCREENSHOT !== '1');
   win.loadFile('index.html');
   if(process.env.NYONTEKLY_SCREENSHOT==='1'){win.webContents.once('did-finish-load',()=>setTimeout(async()=>{try{const out=path.join(__dirname,'docs');await fs.mkdir(out,{recursive:true});const image=await win.webContents.capturePage();await fs.writeFile(path.join(out,'workspace.png'),image.toPNG());console.log('Saved docs/workspace.png');app.quit();}catch(e){console.error(e);app.exit(1);}},1500));}
   win.webContents.on('will-attach-webview', (event, prefs, params) => {
@@ -27,11 +28,11 @@ function createWindow() {
 }
 app.whenReady().then(() => {
   const s = session.defaultSession;
-  s.setPermissionRequestHandler((wc, permission, callback) => callback(wc === win?.webContents && permission === 'display-capture'));
+  s.setPermissionRequestHandler((wc, permission, callback, details) => callback(wc === win?.webContents && (permission === 'display-capture' || (permission === 'media' && details.mediaTypes?.length > 0 && details.mediaTypes.every(x => x === 'audio')))));
   s.setDisplayMediaRequestHandler(async (request, callback) => {
     if (request.frame !== win?.webContents.mainFrame || !requestedSource) return callback({});
-    const id = requestedSource; requestedSource = null;
-    try { const sources = await desktopCapturer.getSources({types:['screen','window'], thumbnailSize:{width:0,height:0}}); const source = sources.find(x => x.id === id); callback(source ? {video: source} : {}); } catch { callback({}); }
+    const id = requestedSource, withAudio=requestedAudio; requestedSource = null; requestedAudio=false;
+    try { const sources = await desktopCapturer.getSources({types:['screen','window'], thumbnailSize:{width:0,height:0}}); const source = sources.find(x => x.id === id); callback(source ? (withAudio ? {video: source, audio: 'loopback'} : {video: source}) : {}); } catch { callback({}); }
   });
   const examSession=session.fromPartition(examSessionName);
   examSession.webRequest.onBeforeSendHeaders((details, callback) => callback({requestHeaders:rewriteHeaders(details,examProfile)}));
@@ -45,7 +46,7 @@ app.whenReady().then(() => {
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());
 ipcMain.handle('sources', async e => { if (!local(e)) return []; const sources=await desktopCapturer.getSources({types:['screen','window'], thumbnailSize:{width:240,height:135}}); return sources.filter(s => !s.name.includes('Nyontekly')).map(s=>({id:s.id,name:s.name,thumbnail:s.thumbnail.toDataURL()})); });
-ipcMain.handle('select-source', (e,id) => { if (!local(e) || typeof id !== 'string') return false; requestedSource=id; return true; });
+ipcMain.handle('select-source', (e,id,audio) => { if (!local(e) || typeof id !== 'string') return false; requestedSource=id; requestedAudio=audio===true; return true; });
 ipcMain.handle('window-action', (e,action,value) => { if (!local(e)) return; if(action==='hide') win.hide(); if(action==='minimize') win.minimize(); if(action==='close') win.close(); if(action==='pin') win.setAlwaysOnTop(Boolean(value)); if(action==='protection') win.setContentProtection(Boolean(value)); if(action==='opacity') win.setOpacity(Math.max(0.4,Math.min(1,Number(value)||1))); });
 ipcMain.handle('copy-image', (e,bytes) => { if (!local(e) || bytes.byteLength > 30_000_000) return false; clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(bytes))); return true; });
 ipcMain.handle('save-file', async (e, bytes, kind) => { if (!local(e) || !['png','webm'].includes(kind) || bytes.byteLength > 500_000_000) throw new Error('File is too large or invalid'); const {canceled,filePath}=await dialog.showSaveDialog(win,{defaultPath:`nyontekly-${Date.now()}.${kind}`,filters:[{name:kind.toUpperCase(),extensions:[kind]}]}); if(canceled || !filePath) return false; await fs.writeFile(filePath,Buffer.from(bytes)); return true; });
@@ -105,3 +106,29 @@ ipcMain.handle('ocr', async(e,bytes)=>{
 });
 
 ipcMain.handle('copy-text', (e,text)=>{if(!local(e)||typeof text!=='string'||text.length>1000000)throw new Error('Invalid text');clipboard.writeText(text);});
+
+let voiceWorker=null, voicePending=new Map(), voiceSequence=0;
+function stopVoiceWorker() {
+  if(voiceWorker){voiceWorker.kill();voiceWorker=null;}
+  for(const item of voicePending.values()) item.reject(new Error('Voice worker stopped.'));
+  voicePending.clear();
+}
+function ensureVoiceWorker(){
+  if(voiceWorker)return voiceWorker;
+  const script=app.isPackaged ? path.join(process.resourcesPath,'app.asar.unpacked','voice','worker.py') : path.join(__dirname,'voice','worker.py');
+  const command=process.platform==='win32'?'python':'python3';
+  const child=spawn(command,['-u',script],{stdio:['pipe','pipe','pipe'],windowsHide:true});voiceWorker=child;
+  let errors='';child.stderr.on('data',d=>{errors=(errors+d.toString()).slice(-1000)});
+  readline.createInterface({input:child.stdout}).on('line',line=>{let msg;try{msg=JSON.parse(line)}catch{return} if(msg.type==='status'){if(win)win.webContents.send('voice-status',msg.message);return;}if(msg.type==='fatal'){for(const p of voicePending.values())p.reject(new Error(msg.error));voicePending.clear();return;}const p=voicePending.get(msg.id);if(!p)return;voicePending.delete(msg.id);if(msg.type==='error')p.reject(new Error(msg.error));else p.resolve(msg);});
+  child.on('error',()=>{if(voiceWorker===child)stopVoiceWorker();});
+  child.on('exit',()=>{if(voiceWorker===child){voiceWorker=null;for(const p of voicePending.values())p.reject(new Error('Voice worker exited. Check Python and faster-whisper installation. '+errors));voicePending.clear();}});
+  return child;
+}
+ipcMain.handle('voice-transcribe', (e,bytes,options)=>{
+  if(!local(e)||!(bytes instanceof ArrayBuffer)||bytes.byteLength>16000000||!bytes.byteLength)throw new Error('Invalid audio.');
+  if(voicePending.size>=3)throw new Error('Transcription is falling behind. Stop and choose a smaller model.');
+  if(!options || !['tiny','base','small','medium','large-v3','distil-large-v3'].includes(options.model)||!['','en','id'].includes(options.language))throw new Error('Invalid voice settings.');
+  return new Promise((resolve,reject)=>{const child=ensureVoiceWorker(),id=++voiceSequence;voicePending.set(id,{resolve,reject});child.stdin.write(JSON.stringify({id,model:options.model,language:options.language,audio:Buffer.from(bytes).toString('base64')})+'\n',err=>{if(err){voicePending.delete(id);reject(new Error('Voice worker unavailable.'));}});});
+});
+ipcMain.handle('voice-stop',e=>{if(local(e))stopVoiceWorker();});
+app.on('before-quit',stopVoiceWorker);
