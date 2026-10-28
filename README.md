@@ -59,3 +59,18 @@ Use **Session** to combine lecture/coding/interview instructions with notes, a t
 The microphone, system-audio capture, local model download, OCR, PDF display, sign-in, and screenshot protection still require testing on your target desktop. To test worker protocol without downloading a model: `python -m unittest discover -s voice -p 'test_*.py'`.
 
 **Ask this** in Capture runs OCR on the selected screenshot and copies a session prompt containing the extracted text; paste the image separately if needed. In the Session tab, Ctrl/Cmd+Enter copies the current prompt. Session instructions, questions, and text references also persist locally.
+
+## Optional GPT Image 2 Artifact Cleaner
+
+The **Cleaner** tab integrates [Larryvrh's GPT Image 2 Artifact Cleaner](https://github.com/Larryvrh/gpt-image-2-artifact-cleaner) as a separately installed local program. It targets visual artifacts specific to GPT Image 2. It does not verify or promise removal of invisible watermarks or provenance signals. The cleaner converts the image to RGB, so this integration composites transparency on white. Stronger settings can soften genuine details; start at 0.5 and compare the images. Outputs are PNG, with the input never overwritten.
+
+The upstream project and its residual weights are licensed under the **PolyForm Noncommercial License 1.0.0**. Read the [upstream license](https://github.com/Larryvrh/gpt-image-2-artifact-cleaner/blob/main/LICENSE) and obtain a separate license for commercial use. Nyontekly does not bundle upstream code or weights. The FLUX.2-VAE model is distributed separately under Apache 2.0.
+
+Setup on the machine running Nyontekly:
+
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git, then restart Nyontekly so `uv` is on PATH.
+2. Clone the upstream repository: `git clone https://github.com/Larryvrh/gpt-image-2-artifact-cleaner.git`.
+3. Open **Cleaner → Choose cleaner folder** and select the cloned folder. Select an image, strength and device, then run. `uv run` installs the upstream dependencies if needed; the upstream VAE downloads from Hugging Face on first use. GPU is recommended; CPU can take significantly longer. Enable tiling for large images.
+4. Compare the result and save it explicitly. Select the folder again after restarting Nyontekly.
+
+Your image is processed locally and copied to a temporary file while the job runs; temporary files are removed afterward. Running this feature executes code in the selected folder with your user permissions, so select only a trusted upstream checkout. Model downloads and dependency installation require internet access; consult the upstream project for its model, hardware and licensing details. Results are not guaranteed to be bit-identical across hardware or software versions.

@@ -1,5 +1,6 @@
 const {contextBridge, ipcRenderer} = require('electron');
 contextBridge.exposeInMainWorld('nyontekly', {
+  cleanerFolder: () => ipcRenderer.invoke('cleaner-folder'), cleanerRun: (bytes,options) => ipcRenderer.invoke('cleaner-run',bytes,options), cleanerCancel: () => ipcRenderer.invoke('cleaner-cancel'), onCleanerProgress: fn => ipcRenderer.on('cleaner-progress',(_e,text)=>fn(text)),
   transcribe: (bytes,options) => ipcRenderer.invoke('voice-transcribe',bytes,options), stopVoice: () => ipcRenderer.invoke('voice-stop'), onVoiceStatus: fn => ipcRenderer.on('voice-status',(_e,status)=>fn(status)),
   onExamResult: fn => ipcRenderer.on('exam-result',(_e,result)=>fn(result)),
   copyText: value => ipcRenderer.invoke('copy-text',value),

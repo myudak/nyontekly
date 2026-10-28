@@ -6,8 +6,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check renderer.js && node --check seb.js",
-    "test": "node --test test-seb.js",
+    "check": "node --check main.js && node --check preload.js && node --check renderer.js && node --check seb.js && node --check cleaner-runner.js",
+    "test": "node --test test-seb.js test-cleaner.js",
     "package:win": "electron-builder --win portable --x64 --publish never",
     "screenshot": "node scripts/screenshot.js"
   },
@@ -27,7 +27,8 @@
       "seb.js",
       "package.json",
       "voice/worker.py",
-      "voice/requirements.txt"
+      "voice/requirements.txt",
+      "cleaner-runner.js"
     ],
     "directories": {
       "output": "dist"

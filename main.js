@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 const {configProfile, parseUrl, rewriteHeaders, sha256} = require('./seb');
+const {runCleaner,verifyDirectory} = require('./cleaner-runner');
 let win, requestedSource = null, requestedAudio = false, examWindow, examProfile = null, mockServer = null;
 const examSessionName = 'persist:nyontekly-exam';
 const local = e => e.sender === win?.webContents;
@@ -132,3 +133,18 @@ ipcMain.handle('voice-transcribe', (e,bytes,options)=>{
 });
 ipcMain.handle('voice-stop',e=>{if(local(e))stopVoiceWorker();});
 app.on('before-quit',stopVoiceWorker);
+
+let cleanerDir = null, cleanerAbort = null;
+ipcMain.handle('cleaner-folder', async e=>{
+ if(!local(e))throw new Error('Not allowed.');
+ const selection=await dialog.showOpenDialog(win,{title:'Select GPT Image 2 Artifact Cleaner folder',properties:['openDirectory']});
+ if(selection.canceled)return null; cleanerDir=await verifyDirectory(selection.filePaths[0]);return cleanerDir;
+});
+ipcMain.handle('cleaner-run', async(e,bytes,options)=>{
+ if(!local(e))throw new Error('Not allowed.');if(cleanerAbort)throw new Error('A cleaner job is already running.');
+ if(!(bytes instanceof ArrayBuffer))throw new Error('Invalid input.');
+ const ctl=new AbortController();cleanerAbort=ctl;
+ try{const result=await runCleaner({dir:cleanerDir,bytes:Buffer.from(bytes),alpha:options?.alpha,device:options?.device,tile:options?.tile===true,signal:ctl.signal,onProgress:text=>{if(win&&!win.isDestroyed())win.webContents.send('cleaner-progress',text)}});return new Uint8Array(result);}finally{if(cleanerAbort===ctl)cleanerAbort=null;}
+});
+ipcMain.handle('cleaner-cancel',e=>{if(local(e))cleanerAbort?.abort();});
+app.on('before-quit',()=>cleanerAbort?.abort());
