@@ -2,11 +2,14 @@
   "name": "electron-web-tool",
   "version": "1.0.0",
   "private": true,
-  "description": "Small capture-protected Electron window for a web tool",
+  "description": "Floating assistant and capture workspace",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "package:win": "electron-builder --win portable --x64 --publish never"
+    "check": "node --check main.js && node --check preload.js && node --check renderer.js && node --check seb.js",
+    "test": "node --test test-seb.js",
+    "package:win": "electron-builder --win portable --x64 --publish never",
+    "screenshot": "node scripts/screenshot.js"
   },
   "devDependencies": {
     "electron": "44.4.5",
@@ -17,18 +20,18 @@
     "asar": true,
     "files": [
       "main.js",
-      "settings-preload.js",
-      "settings.html",
-      "settings.css",
-      "settings.js",
-      "tray.png",
+      "preload.js",
+      "index.html",
+      "style.css",
+      "renderer.js",
+      "seb.js",
       "package.json"
     ],
     "directories": {
       "output": "dist"
     },
     "win": {
-      "artifactName": "WebTool-${version}-portable.${ext}"
+      "artifactName": "Nyontekly-${version}-portable.${ext}"
     }
   }
 }
