@@ -1,4 +1,4 @@
-const { app, BrowserWindow, desktopCapturer, ipcMain, session, globalShortcut, dialog, clipboard, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, session, globalShortcut, dialog, clipboard, nativeImage, shell, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const http = require('node:http');
@@ -8,6 +8,8 @@ const readline = require('node:readline');
 const {configProfile, parseUrl, rewriteHeaders, sha256} = require('./seb');
 const {runCleaner,verifyDirectory} = require('./cleaner-runner');
 const {PedalRunner,inspectPedal} = require('./pedal-runner');
+const {StickyStore}=require('./sticky-store');
+let dockWindow=null, stickyStore=null;
 let win, requestedSource = null, requestedAudio = false, examWindow, examProfile = null, mockServer = null;
 const examSessionName = 'persist:nyontekly-exam';
 const local = e => e.sender === win?.webContents;
@@ -41,6 +43,7 @@ app.whenReady().then(() => {
   examSession.webRequest.onCompleted((details)=>{ if(win && details.resourceType==='mainFrame') win.webContents.send('exam-result',{url:details.url,status:details.statusCode}); });
   examSession.webRequest.onErrorOccurred((details)=>{ if(win && details.resourceType==='mainFrame') win.webContents.send('exam-result',{url:details.url,error:details.error}); });
   examSession.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
+  stickyStore=new StickyStore(path.join(app.getPath('userData'),'sticky-notes.json'));
   createWindow();
   registerShortcuts({toggle:'CommandOrControl+Shift+Space',capture:'CommandOrControl+Shift+S'});
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -156,3 +159,31 @@ ipcMain.handle('pedal-folder',async e=>{if(!local(e))throw new Error('Not allowe
 ipcMain.handle('pedal-start',async(e,options)=>{if(!local(e))throw new Error('Not allowed.');return pedalRunner.start(pedalDir,options);});
 ipcMain.handle('pedal-stop',e=>{if(!local(e))throw new Error('Not allowed.');return pedalRunner.stop();});
 app.on('before-quit',()=>pedalRunner.stop());
+
+function stickyAllowed(e){return local(e) || e.sender===dockWindow?.webContents;}
+function requireSticky(e){if(!stickyAllowed(e))throw new Error('Not allowed.');}
+function positionDock(edge,displayId,expanded){
+ if(!dockWindow || dockWindow.isDestroyed())return;
+ const displays=screen.getAllDisplays(),display=displays.find(d=>String(d.id)===String(displayId))||screen.getPrimaryDisplay();
+ const area=display.workArea, w=Math.min(expanded?320:52,area.width),h=Math.min(expanded?520:320,area.height);
+ let x=area.x+area.width-w,y=area.y+Math.round((area.height-h)/2);
+ if(edge==='left')x=area.x;if(edge==='bottom'){x=area.x+Math.round((area.width-w)/2);y=area.y+area.height-h;}
+ dockWindow.setBounds({x,y,width:w,height:h});
+}
+let dockEdge='right',dockDisplay=null,dockExpanded=true;
+function openDock(){
+ if(dockWindow&&!dockWindow.isDestroyed()){dockWindow.show();dockWindow.focus();return;}
+ dockWindow=new BrowserWindow({width:320,height:520,frame:false,resizable:false,alwaysOnTop:true,skipTaskbar:true,backgroundColor:'#17181c',webPreferences:{preload:path.join(__dirname,'sticky-preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+ dockWindow.setContentProtection(true);positionDock(dockEdge,dockDisplay,dockExpanded);dockWindow.loadFile('sticky.html');
+ dockWindow.webContents.setWindowOpenHandler(()=>({action:'deny'}));dockWindow.webContents.on('will-navigate',e=>e.preventDefault());dockWindow.on('closed',()=>dockWindow=null);
+}
+function broadcastNotes(){for(const w of [win,dockWindow])if(w&&!w.isDestroyed())w.webContents.send('sticky-changed');}
+ipcMain.handle('sticky-open',e=>{requireSticky(e);openDock();});
+ipcMain.handle('sticky-close',e=>{requireSticky(e);if(dockWindow&&!dockWindow.isDestroyed())dockWindow.close();});
+ipcMain.handle('sticky-list',async e=>{requireSticky(e);return stickyStore.list();});
+ipcMain.handle('sticky-create',async(e,value)=>{requireSticky(e);const v=await stickyStore.create(value);broadcastNotes();return v;});
+ipcMain.handle('sticky-update',async(e,id,value)=>{requireSticky(e);const v=await stickyStore.update(id,value);broadcastNotes();return v;});
+ipcMain.handle('sticky-remove',async(e,id)=>{requireSticky(e);const v=await stickyStore.remove(id);broadcastNotes();return v;});
+ipcMain.handle('sticky-displays',e=>{requireSticky(e);return screen.getAllDisplays().map((d,i)=>({id:String(d.id),label:d.label||`Display ${i+1}`,primary:d.id===screen.getPrimaryDisplay().id}));});
+ipcMain.handle('sticky-position',(e,edge,id,expanded)=>{requireSticky(e);if(!['left','right','bottom'].includes(edge))throw Error('Invalid dock position.');dockEdge=edge;dockDisplay=String(id||'');dockExpanded=Boolean(expanded);positionDock(dockEdge,dockDisplay,dockExpanded);});
+ipcMain.handle('sticky-export',async e=>{requireSticky(e);const notes=await stickyStore.list();const {canceled,filePath}=await dialog.showSaveDialog(dockWindow||win,{defaultPath:'nyontekly-notes.json',filters:[{name:'JSON',extensions:['json']}]});if(canceled||!filePath)return false;await fs.writeFile(filePath,JSON.stringify(notes,null,2),'utf8');return true;});

@@ -1,5 +1,6 @@
 const {contextBridge, ipcRenderer} = require('electron');
 contextBridge.exposeInMainWorld('nyontekly', {
+  openSticky: () => ipcRenderer.invoke('sticky-open'),
   pedalFolder: () => ipcRenderer.invoke('pedal-folder'), pedalStart: options => ipcRenderer.invoke('pedal-start',options), pedalStop: () => ipcRenderer.invoke('pedal-stop'), onPedalStatus: fn => ipcRenderer.on('pedal-status',(_e,status)=>fn(status)),
   cleanerFolder: () => ipcRenderer.invoke('cleaner-folder'), cleanerRun: (bytes,options) => ipcRenderer.invoke('cleaner-run',bytes,options), cleanerCancel: () => ipcRenderer.invoke('cleaner-cancel'), onCleanerProgress: fn => ipcRenderer.on('cleaner-progress',(_e,text)=>fn(text)),
   transcribe: (bytes,options) => ipcRenderer.invoke('voice-transcribe',bytes,options), stopVoice: () => ipcRenderer.invoke('voice-stop'), onVoiceStatus: fn => ipcRenderer.on('voice-status',(_e,status)=>fn(status)),

@@ -14,6 +14,7 @@ A floating AI workspace for quick answers, screenshots, voice transcription, and
 - **Text from screenshots** — Extract editable text with OCR and prepare a prompt from an image.
 - **Voice transcription** — Transcribe microphone or supported system audio locally with selectable Whisper models and English or Indonesian language options.
 - **Session workspace** — Combine transcripts, notes, text references, and screenshot text into a prompt. Choose lecture, coding, interview practice, or custom instructions.
+- **Sticky notes** — Create colored notes in an edge dock, search and archive them, add Markdown tasks, and export them. Choose a screen and dock edge.
 - **Notes and answer cards** — Keep a local scratchpad and save useful answers with searchable tags.
 - **Practice mode** — Open text files or PDFs and work through questions.
 - **Custom shortcuts** — Set shortcuts for showing the window and opening the screenshot picker.
@@ -29,4 +30,5 @@ Get the latest portable Windows build from [GitHub Actions](https://github.com/m
 - **Image cleaner:** Install [GPT Image 2 Artifact Cleaner](https://github.com/Larryvrh/gpt-image-2-artifact-cleaner) separately and select its folder in the app. Its upstream license is **noncommercial** unless separately licensed. It targets visual artifacts and does not guarantee removal of watermarks or provenance signals.
 - **Camera loop:** Install [Video Pedal](https://github.com/haxybaxy/video-pedal) and a compatible virtual camera separately. [See setup](docs/video-pedal.md).
 - **Voice and OCR:** Voice requires Python and [faster-whisper](https://github.com/SYSTRAN/faster-whisper); OCR requires [Tesseract](https://github.com/tesseract-ocr/tesseract). Voice models download on first use. Audio input availability depends on your system and permissions.
+- **Sticky notes:** Open the dock from the Notes tab. Notes are stored locally, separate from the scratchpad; iCloud sync is not supported.
 - **AI answers:** Prompts are copied for you to paste into your chosen AI website; answers and summaries are not generated automatically by Nyontekly. Sign-in support depends on the website.

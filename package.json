@@ -6,8 +6,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check renderer.js && node --check seb.js && node --check cleaner-runner.js && node --check pedal-runner.js",
-    "test": "node --test test-seb.js test-cleaner.js test-pedal.js",
+    "check": "node --check main.js && node --check preload.js && node --check renderer.js && node --check seb.js && node --check cleaner-runner.js && node --check pedal-runner.js && node --check sticky-store.js && node --check sticky-preload.js && node --check sticky.js",
+    "test": "node --test test-seb.js test-cleaner.js test-pedal.js test-sticky.js",
     "package:win": "electron-builder --win portable --x64 --publish never",
     "screenshot": "node scripts/screenshot.js"
   },
@@ -29,7 +29,12 @@
       "voice/worker.py",
       "voice/requirements.txt",
       "cleaner-runner.js",
-      "pedal-runner.js"
+      "pedal-runner.js",
+      "sticky-store.js",
+      "sticky-preload.js",
+      "sticky.html",
+      "sticky.css",
+      "sticky.js"
     ],
     "directories": {
       "output": "dist"
